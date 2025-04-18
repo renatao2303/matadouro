@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <title>Formatador - HSM</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f4f4f4; 
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    .container {
+      background-color: #ffffff; 
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      width: 100%;
+      max-width: 480px;
+      position: relative;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 20px;
+      color: #0056b3; 
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .file-label {
+      display: inline-block;
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      text-align: center;
+      border: 1px solid #cccccc; 
+      border-radius: 8px;
+      background-color: #f9f9f9; 
+      color: #333333; 
+      cursor: pointer;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    .file-label:hover {
+      background-color: #e6e6e6; 
+      color: #000000; 
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      background-color: #0056b3; 
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #003d80; 
+    }
+
+    .loader {
+      border: 4px solid #f3f4f6;
+      border-top: 4px solid #0056b3; 
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+      display: none;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .message {
+      margin-top: 20px;
+      font-size: 16px;
+      color: #28a745; 
+      display: none;
+    }
+
+    @media (max-width: 500px) {
+      .container {
+        padding: 30px 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Formatador - HSM</h1>
+    <label for="excelFile" class="file-label">Escolher Arquivo</label>
+    <input type="file" id="excelFile" accept=".xlsx" />
+    <button onclick="processarExcel()">Processar Excel e Baixar CSV</button>
+    <div class="loader" id="loader"></div>
+    <div class="message" id="successMessage">✅ Arquivo gerado com sucesso!</div>
+  </div>
+
+  <script>
+    function processarExcel() {
+      const fileInput = document.getElementById("excelFile");
+      const file = fileInput.files[0];
+      const loader = document.getElementById("loader");
+      const message = document.getElementById("successMessage");
+
+      if (!file) return alert("Por favor, selecione um arquivo .xlsx");
+
+      loader.style.display = "block";
+      message.style.display = "none";
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+        const resultado = json.map((row, index) => {
+          const rawTel = row.Whatsapp || row.Telefone;
+          const nomeCompleto = row.Cliente || row.Nome;
+          const email = row.Email || "";
+          const cpf = row["cpf/cnpj"] || "";
+          const mailing = index < 2 ? "121000000000000" : ""; // NAO MUDA ESSA BOSTA !!! VAI DAR MERDA
+
+          const tel = formatarNumero(rawTel);
+          const nome = formatarNome(nomeCompleto);
+
+          if (!tel || !nome) return null;
+
+          return {
+            "Telefone": tel,
+            "Nome": nome,
+            "Email": email,
+            "cpf/cnpj": cpf,
+            "id_Mailing": mailing,
+            "1": nome
+          };
+        }).filter(Boolean);
+
+        const ws = XLSX.utils.json_to_sheet(resultado, { header: ["Telefone", "Nome", "Email", "cpf/cnpj", "id_Mailing", "1"], FS: ";" });
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "HSM");
+
+        const hoje = new Date().toISOString().split("T")[0];
+        XLSX.writeFile(wb, `PADRAO-HSM-${hoje}.csv`, { bookType: "csv", FS: ";" });
+
+        loader.style.display = "none";
+        message.style.display = "block";
+      };
+
+      reader.readAsArrayBuffer(file);
+    }
+
+    function formatarNumero(num) {
+      if (!num) return null;
+      let limpo = String(num).replace(/\D/g, "").replace(/^0+/, "");
+      if (limpo.length >= 10 && limpo.length <= 13) {
+        if (!limpo.startsWith("55")) limpo = "55" + limpo;
+        return Number(limpo).toFixed(0); //PUTA QUE PARIU NAO ALTERAR ISSO AQ
+      }
+      return null;
+    }
+
+    function formatarNome(nome) {
+      if (!nome) return "";
+      let primeiro = String(nome).trim().split(" ")[0];
+      return primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase();
+    }
+  </script>
+</body>
+</html>
